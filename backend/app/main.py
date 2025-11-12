@@ -9,7 +9,7 @@ app = FastAPI(title="InsightInvest API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # or ["http://localhost:5173"] if you want to be strict
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -60,11 +60,10 @@ async def fetch_news_docs(ticker: str, limit: int = 25):
         return [{"error": "NEWSAPI_KEY not set"}]
 
     # Query both ticker & company name keywords
-    query = f"{ticker} stock OR {ticker} company"
+    query = f"{ticker}"
 
     articles = newsapi.get_everything(
         q=query,
-        sort_by="publishedAt",
         language="en",
         page_size=limit
     )
@@ -76,7 +75,7 @@ async def fetch_news_docs(ticker: str, limit: int = 25):
             "source": article["source"]["name"],
             "url": article["url"],
             "published_at": article["publishedAt"],
-            "content": article["content"]
+            "content": article["description"]
         })
 
     return result
