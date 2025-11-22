@@ -1,166 +1,195 @@
-import { useState } from "react";
-import { TrendingUp, FileText, Calendar, Search } from "lucide-react";
+import React, { useState } from "react";
+import axios from 'axios';
+import { 
+  TrendingUp, 
+  Search, 
+  Loader2, 
+  MessageSquare, 
+  ArrowRight,
+  Sparkles
+} from "lucide-react";
+import StockChart from './components/StockChart';
+import AnalysisCard from './components/AnalysisCard';
 
 function App() {
+  // State for inputs
   const [ticker, setTicker] = useState("");
+  const [question, setQuestion] = useState("");
   const [horizon, setHorizon] = useState(7);
-  const [report, setReport] = useState("");
+  
+  // State for response
+  const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const generateReport = async () => {
     if (!ticker) {
-      alert("Enter a ticker symbol first.");
+      setError("Please enter a ticker symbol (e.g., AAPL) to begin.");
       return;
     }
 
     setLoading(true);
-    setReport("");
+    setError("");
+    setReport(null);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/report", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ticker,
-          horizon_days: horizon,
-        }),
+      // Construct the user input based on whether they typed a question
+      // If box is empty, default to "Analyze [Ticker] stock"
+      const finalQuery = question.trim() 
+        ? question 
+        : `Analyze ${ticker} stock performance and outlook.`;
+
+      const response = await axios.post("http://127.0.0.1:8000/api/chat", {
+        user_input: finalQuery,
+        ticker: ticker,
+        horizon_days: horizon,
       });
 
-      const data = await response.json();
-      setReport(data.report);
+      setReport(response.data);
     } catch (err) {
-      setReport("Error fetching report. Check your backend connection.");
-    }
-
-    setLoading(false);
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter") {
-      generateReport();
+      console.error(err);
+      setError("Connection failed. Ensure the backend is running on port 8000.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Animated background effect */}
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDE2YzAtNi42MjcgNS4zNzMtMTIgMTItMTJzMTIgNS4zNzMgMTIgMTItNS4zNzMgMTItMTIgMTItMTItNS4zNzMtMTItMTJ6TTAgMTZjMC02LjYyNyA1LjM3My0xMiAxMi0xMnMxMiA1LjM3MyAxMiAxMi01LjM3MyAxMi0xMiAxMlMwIDIyLjYyNyAwIDE2eiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-purple-500/30 pb-20">
+      
+      {/* --- BACKGROUND EFFECTS --- */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-900/20 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-900/10 rounded-full blur-[120px]"></div>
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+      </div>
 
-      <div className="relative max-w-6xl mx-auto px-6 py-12">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <TrendingUp className="w-12 h-12 text-purple-400" />
-            <h1 className="text-5xl font-bold text-white">
-              InsightInvest
-            </h1>
+      <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-6 py-12">
+        
+        {/* --- HEADER --- */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center gap-3 mb-6 bg-slate-900/50 border border-slate-700/50 p-2 pr-6 rounded-full backdrop-blur-sm">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+                <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-white">InsightInvest</span>
           </div>
-          <p className="text-purple-200 text-lg">
-            AI-Powered Investment Analysis & Reporting
+          
+          <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-6 tracking-tight leading-tight">
+            The AI Analyst That <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-blue-400 to-emerald-400 animate-gradient">
+              Really Understands
+            </span>
+          </h1>
+          <p className="text-slate-400 text-lg max-w-xl mx-auto">
+            Combine real-time news, quarterly fundamentals, and quantitative predictive modeling into one actionable report.
           </p>
         </div>
 
-        {/* Main Card */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8 mb-8">
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            {/* Ticker Input */}
-            <div>
-              <label className="flex items-center gap-2 text-purple-200 font-medium mb-3">
-                <Search className="w-5 h-5" />
-                Stock Ticker
-              </label>
-              <input
-                type="text"
-                value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                onKeyPress={handleKeyPress}
-                placeholder="e.g., AAPL, MSFT, GOOGL"
-                className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-              />
+        {/* --- RESEARCH COMMAND CENTER --- */}
+        <div className="max-w-3xl mx-auto mb-16 bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 shadow-2xl">
+          
+          {/* Top Row: Ticker & Horizon */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-4">
+            <div className="relative flex-1 group">
+                <Search className="absolute left-4 top-3.5 text-slate-500 w-5 h-5 group-focus-within:text-purple-400 transition-colors" />
+                <input
+                    type="text"
+                    value={ticker}
+                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                    placeholder="Ticker Symbol (e.g. NVDA)"
+                    className="w-full bg-slate-950/50 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all font-bold tracking-wide"
+                />
             </div>
-
-            {/* Horizon Input */}
-            <div>
-              <label className="flex items-center gap-2 text-purple-200 font-medium mb-3">
-                <Calendar className="w-5 h-5" />
-                Forecast Horizon (Days)
-              </label>
-              <input
-                type="number"
-                value={horizon}
-                onChange={(e) => setHorizon(parseInt(e.target.value) || 7)}
-                onKeyPress={handleKeyPress}
-                min="1"
-                max="365"
-                className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-              />
+            
+            <div className="relative w-full sm:w-48 group">
+                <div className="absolute left-4 top-3.5 text-slate-500 text-xs font-bold uppercase tracking-wider pointer-events-none">
+                    Horizon
+                </div>
+                <input 
+                    type="number" 
+                    value={horizon}
+                    onChange={(e) => setHorizon(parseInt(e.target.value))}
+                    className="w-full bg-slate-950/50 border border-slate-700 rounded-xl pl-20 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all font-mono"
+                    min="1" max="30"
+                />
+                <div className="absolute right-4 top-3.5 text-slate-500 text-sm pointer-events-none">Days</div>
             </div>
           </div>
 
-          {/* Generate Button */}
+          {/* Middle Row: Natural Language Question */}
+          <div className="relative mb-6 group">
+            <MessageSquare className="absolute left-4 top-4 text-slate-500 w-5 h-5 group-focus-within:text-blue-400 transition-colors" />
+            <textarea
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask a specific question (optional)... &#10;Ex: 'How will the new AI chip announcements affect margins?'"
+                className="w-full bg-slate-950/50 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all resize-none h-28 leading-relaxed"
+            />
+          </div>
+
+          {/* Action Button */}
           <button
             onClick={generateReport}
             disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-purple-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 group"
           >
             {loading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                Generating Analysis...
-              </>
+                <>
+                    <Loader2 className="animate-spin w-6 h-6"/> 
+                    Running Analysis...
+                </>
             ) : (
-              <>
-                <FileText className="w-5 h-5" />
-                Generate Investment Report
-              </>
+                <>
+                    <Sparkles className="w-5 h-5 text-yellow-300" />
+                    Generate Research Report
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </>
             )}
           </button>
+
+          {error && (
+            <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm text-center rounded-lg animate-fade-in">
+                {error}
+            </div>
+          )}
         </div>
 
-        {/* Report Display */}
+        {/* --- RESULTS DASHBOARD --- */}
         {report && (
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8 animate-fade-in">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/20">
-              <FileText className="w-6 h-6 text-purple-400" />
-              <h2 className="text-2xl font-bold text-white">
-                Analysis Report
-              </h2>
+          <div className="space-y-10 animate-fade-in-up">
+            
+            {/* 1. User Query Context (Visual Feedback) */}
+            <div className="text-center">
+                <div className="inline-block px-4 py-1 bg-slate-800 rounded-full text-xs text-slate-400 mb-2 border border-slate-700">
+                    Analysis Request
+                </div>
+                <h3 className="text-xl md:text-2xl text-white font-medium">
+                    "{report.reply && question ? question : `Analyze ${ticker} stock performance`}"
+                </h3>
             </div>
-            <div className="prose prose-invert max-w-none">
-              <pre className="text-purple-100 whitespace-pre-wrap leading-relaxed font-sans text-base">
-                {report}
-              </pre>
-            </div>
+
+            {/* 2. Charts & Data */}
+            <section>
+                <StockChart data={report.chart_data} />
+            </section>
+
+            {/* 3. The AI Report */}
+            <section>
+                <AnalysisCard report={report} />
+            </section>
           </div>
         )}
 
-        {/* Footer */}
-        {!loading && !report && (
-          <div className="text-center text-purple-300/60 mt-12">
-            <p className="text-sm">
-              Enter a ticker symbol and forecast horizon to generate your investment analysis
-            </p>
-          </div>
+        {/* --- LOADING SKELETON --- */}
+        {loading && !report && (
+            <div className="max-w-3xl mx-auto space-y-6 mt-12 opacity-50">
+                <div className="h-96 w-full bg-slate-800/30 rounded-2xl animate-pulse"></div>
+                <div className="h-40 w-full bg-slate-800/30 rounded-2xl animate-pulse"></div>
+            </div>
         )}
+
       </div>
-
-      <style>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.5s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

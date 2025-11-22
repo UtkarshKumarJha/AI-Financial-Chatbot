@@ -4,7 +4,6 @@ import asyncio
 from ..services.data_fetcher import fetch_fundamentals, fetch_price_history, fetch_news_docs
 from ..services.sentiment import compute_sentiment
 from ..services.predictor import predict_prices
-from ..services.rag import synthesize_report
 from datetime import datetime
 
 async def generate_report(ticker: str, horizon_days: int = 7):
@@ -20,8 +19,6 @@ async def generate_report(ticker: str, horizon_days: int = 7):
     sentiment = compute_sentiment(news_docs)
     prediction = await predict_prices(price_history, horizon_days)
 
-    report_text = synthesize_report(ticker, fundamentals, price_history, news_docs, sentiment, prediction)
-
     return {
         "ticker": ticker.upper(),
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -30,5 +27,4 @@ async def generate_report(ticker: str, horizon_days: int = 7):
         "news_docs": news_docs,
         "sentiment": sentiment,
         "prediction": prediction,
-        "report": report_text
     }

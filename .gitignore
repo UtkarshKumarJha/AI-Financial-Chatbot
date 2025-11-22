@@ -8,3 +8,5 @@ __pycache__/
 .vscode/
 
 frontend/node_modules/
+backend/chroma_db/
+

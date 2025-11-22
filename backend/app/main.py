@@ -3,9 +3,13 @@ from pydantic import BaseModel
 import os
 from .api.report import generate_report
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.chat import router as chat_router
 
-
-app = FastAPI(title="InsightInvest API")
+app = FastAPI(
+    title="InsightInvest API",
+    version="1.0.0",
+    description="API for InsightInvest Financial Chatbot"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,3 +36,4 @@ async def report(req:ReportRequest):
 async def health_check():
     return {"status": "ok","fake_data": os.getenv("FAKE_DATA","0")} 
 
+app.include_router(chat_router)
