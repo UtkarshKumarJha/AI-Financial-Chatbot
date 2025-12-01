@@ -22,6 +22,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+
   const generateReport = async () => {
     if (!ticker) {
       setError("Please enter a ticker symbol (e.g., AAPL) to begin.");
@@ -39,7 +41,7 @@ function App() {
         ? question 
         : `Analyze ${ticker} stock performance and outlook.`;
 
-      const response = await axios.post("http://127.0.0.1:8000/api/chat", {
+      const response = await axios.post(`${API_URL}/api/chat`, {
         user_input: finalQuery,
         ticker: ticker,
         horizon_days: horizon,
