@@ -2,157 +2,169 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from typing import Dict, List
-from datetime import datetime, timedelta
 
-def calculate_rsi(series, period=14):
-    """Calculates Relative Strength Index (RSI)."""
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+# ==========================================
+# 1. FEATURE ENGINEERING (The "Pro" Logic)
+# ==========================================
+
+def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Computes Log Returns, RSI, Volatility, and SMA Distance.
+    """
+    df = df.copy()
+    
+    # 1. Log Returns (The Target)
+    # We use log returns because they are additive and stationary
+    df['log_ret'] = np.log(df['close'] / df['close'].shift(1))
+    
+    # 2. Volatility (Risk)
+    df["volatility"] = df['log_ret'].rolling(window=5).std()
+    
+    # 3. RSI (Momentum)
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
-    return 100 - (100 / (1 + rs))
+    df["rsi"] = 100 - (100 / (1 + rs))
+    
+    # 4. SMA Distance (Mean Reversion)
+    # How far is price from the 10-day average?
+    df["sma_dist"] = df['close'] / df['close'].rolling(window=10).mean() - 1
 
-def calculate_technical_indicators(prices: List[float]) -> pd.DataFrame:
-    """
-    Adds RSI, SMA_20, and Volatility features.
-    """
-    df = pd.DataFrame(prices, columns=["close"])
-    
-    # 1. Simple Moving Average (SMA 20)
-    df["sma_20"] = df["close"].rolling(window=20).mean()
-    
-    # 2. RSI (14)
-    df["rsi"] = calculate_rsi(df["close"], period=14)
-    
-    # 3. Volatility (Standard Deviation of last 5 days)
-    df["volatility"] = df["close"].rolling(window=5).std()
-    
-    # Fill NaNs (first few rows will be empty due to rolling windows)
-    df.fillna(method="bfill", inplace=True)
-    df.fillna(0, inplace=True)
-    
+    # Fill NaNs created by rolling windows
+    df = df.fillna(0)
     return df
 
-def build_dataset(df, lags=7):
+def build_features(df, lags=7):
     """
-    Converts time-series dataframe into Supervised Learning format (X, y).
+    Converts time-series into supervised learning format (X, y).
     """
     X, y = [], []
-    # We need enough data for lags
-    for i in range(lags, len(df)):
-        # Feature vector: 
-        # [Lag1, Lag2... Lag7, RSI_curr, SMA_curr, Vol_curr]
-        lagged_prices = df["close"].iloc[i-lags:i].values.tolist()
+    
+    # We predict the NEXT day's return
+    target_col = 'log_ret'
+    
+    for i in range(lags, len(df) - 1):
+        # Feature Vector: [Past Returns... Technicals]
+        past_returns = df[target_col].iloc[i-lags:i].values.tolist()
         
         technical_features = [
-            df["rsi"].iloc[i-1],      # RSI yesterday
-            df["sma_20"].iloc[i-1],   # SMA yesterday
-            df["volatility"].iloc[i-1]# Volatility yesterday
+            df["rsi"].iloc[i],
+            df["sma_dist"].iloc[i],
+            df["volatility"].iloc[i]
         ]
         
-        features = lagged_prices + technical_features
-        target = df["close"].iloc[i]
+        features = past_returns + technical_features
+        target = df[target_col].iloc[i+1]
         
         X.append(features)
         y.append(target)
         
     return np.array(X), np.array(y)
 
+# ==========================================
+# 2. MAIN PREDICTION PIPELINE
+# ==========================================
+
 async def predict_prices(price_history: List[Dict], horizon_days=7):
     """
-    Advanced Prediction Pipeline:
-    1. Featurization (RSI/SMA)
-    2. XGBoost Regressor
-    3. Conformal Prediction (Confidence Intervals)
+    Predicts future prices using XGBoost on Log Returns.
     """
-    # 1. Extract & Clean Data
+    # 1. Validation
     if not price_history or len(price_history) < 60:
-        return {"error": "Not enough data (need > 60 days for technical analysis)"}
+        return {"error": "Not enough data (need > 60 days)"}
 
-    prices = [p["close"] for p in price_history]
+    # 2. Convert to DataFrame
+    df = pd.DataFrame(price_history)
+    df['close'] = df['close'].astype(float)
     
-    # 2. Feature Engineering
-    df_tech = calculate_technical_indicators(prices)
+    # 3. Apply Engineering
+    df_tech = calculate_technical_indicators(df)
     
-    # 3. Build Dataset (X, y)
+    # 4. Build Dataset
     lags = 7
-    X, y = build_dataset(df_tech, lags=lags)
+    X, y = build_features(df_tech, lags=lags)
     
-    # Split into Train (80%) and Calibration (20%)
-    # We use the calibration set to measure "How wrong is the model usually?"
-    split = int(len(X) * 0.8)
-    X_train, X_calib = X[:split], X[split:]
-    y_train, y_calib = y[:split], y[split:]
+    if len(X) < 20:
+        return {"error": "Not enough valid training samples"}
 
-    # 4. Train Model
+    # 5. Train Model (Using your Best Params from Kaggle)
+    # Params: {'learning_rate': 0.05, 'max_depth': 6, 'n_estimators': 500}
     model = xgb.XGBRegressor(
         n_estimators=500,
         learning_rate=0.05,
-        max_depth=5,
+        max_depth=6,
         objective="reg:squarederror",
+        n_jobs=-1,
         random_state=42
     )
-    model.fit(X_train, y_train)
+    model.fit(X, y)
 
-    # 5. Calculate Uncertainty (Conformal Prediction Lite)
-    # Predict on calibration set
-    preds_calib = model.predict(X_calib)
-    # Calculate absolute errors
-    errors = np.abs(y_calib - preds_calib)
-    # Take the 90th percentile error (we are 90% sure error is below this)
+    # 6. Calculate Uncertainty (Conformal Prediction)
+    preds_train = model.predict(X)
+    errors = np.abs(y - preds_train)
+    # We use a dynamic margin based on recent volatility
     uncertainty_margin = np.percentile(errors, 90)
 
-    # 6. Forecast Future
-    future_preds = []
-    current_window = df_tech["close"].iloc[-lags:].values.tolist()
+    # 7. Recursive Forecast (The Future)
+    future_prices = []
     
-    # We need the latest technicals to start the chain
-    curr_rsi = df_tech["rsi"].iloc[-1]
-    curr_sma = df_tech["sma_20"].iloc[-1]
-    curr_vol = df_tech["volatility"].iloc[-1]
+    # Start from the last known real price
+    current_price = df_tech['close'].iloc[-1]
+    
+    # Build initial input vector
+    # [Last N returns, Last RSI, Last SMA_Dist, Last Volatility]
+    last_known_idx = -1
+    current_features = df_tech['log_ret'].iloc[-lags:].values.tolist() + [
+        df_tech['rsi'].iloc[last_known_idx],
+        df_tech['sma_dist'].iloc[last_known_idx],
+        df_tech['volatility'].iloc[last_known_idx]
+    ]
 
-    # Recursive prediction loop
-    temp_window = current_window.copy()
-    
-    for _ in range(horizon_days):
-        # Build input vector
-        features = temp_window[-lags:] + [curr_rsi, curr_sma, curr_vol]
+    for i in range(horizon_days):
+        # Predict Log Return
+        pred_log_ret = float(model.predict(np.array([current_features]))[0])
         
-        next_price = float(model.predict(np.array([features]))[0])
+        # Convert back to Price: P_new = P_old * e^(return)
+        next_price = current_price * np.exp(pred_log_ret)
+        future_prices.append(next_price)
+        current_price = next_price
         
-        # Append to results
-        future_preds.append(next_price)
-        
-        # Update window for next step
-        temp_window.append(next_price)
-        
-        # Note: In a real production system, you'd update RSI/SMA dynamically here.
-        # For this MVP, keeping them static for 7 days is an acceptable approximation.
+        # Update Feature Vector for next step
+        # Shift returns window and append new prediction
+        # Keep technicals constant (Static Approximation for short-term stability)
+        current_features = current_features[1:lags] + [pred_log_ret] + current_features[lags:]
 
-    # 7. Format Output with Confidence Intervals
-    final_prediction = future_preds[-1]
+    # 8. Construct Output
+    final_price = future_prices[-1]
     
+    # Calculate Confidence Interval (Cone of Uncertainty)
+    # Risk grows with time (Square Root of Time rule)
+    scaling_factor = np.sqrt(horizon_days)
+    upper_bound = final_price * np.exp(uncertainty_margin * scaling_factor)
+    lower_bound = final_price * np.exp(-uncertainty_margin * scaling_factor)
+
     return {
-        "current_price": prices[-1],
-        "forecast_7d": round(final_prediction, 2),
-        "forecast_range_low": round(final_prediction - uncertainty_margin, 2),
-        "forecast_range_high": round(final_prediction + uncertainty_margin, 2),
-        "confidence_interval_90": round(uncertainty_margin, 2),
-        "method": "XGBoost + RSI/SMA + Conformal Prediction",
-        "plot_data": future_preds # Frontend can use this to draw the line
+        "current_price": df_tech['close'].iloc[-1],
+        "forecast_7d": round(final_price, 2),
+        "forecast_range_low": round(lower_bound, 2),
+        "forecast_range_high": round(upper_bound, 2),
+        "confidence_interval_90": round(upper_bound - final_price, 2),
+        "method": "XGBoost (Log-Returns) + Conformal Prediction",
+        "plot_data": future_prices
     }
-    
+
+# ==========================================
+# 3. HELPER FOR FRONTEND CHART
+# ==========================================
+
+from datetime import datetime, timedelta
+
 def generate_chart_data(price_history, prediction_data):
-    """
-    Merges historical data with future predictions into a single
-    chart-ready format for the frontend.
-    """
     chart_data = []
     
-    # 1. Process History (Last 60 days max to keep chart clean)
-    # We assume price_history is sorted by date ascending
+    # History
     history_slice = price_history[-60:] if len(price_history) > 60 else price_history
-    
     last_date_str = None
     
     for day in history_slice:
@@ -165,27 +177,34 @@ def generate_chart_data(price_history, prediction_data):
         })
         last_date_str = day["date"]
 
-    # 2. Process Forecast
-    # We need to generate future dates starting from the day after history ends
+    # Forecast
     if prediction_data and "plot_data" in prediction_data:
         forecast_vals = prediction_data["plot_data"]
-        confidence = prediction_data.get("confidence_interval_90", 0)
+        # We need the daily volatility to draw the cone properly
+        # We approximate it from the final confidence interval width
+        total_width_pct = (prediction_data["forecast_range_high"] / prediction_data["forecast_7d"]) - 1
         
         if last_date_str:
             current_date = datetime.strptime(last_date_str, "%Y-%m-%d")
         else:
             current_date = datetime.utcnow()
 
-        for val in forecast_vals:
+        for i, val in enumerate(forecast_vals):
             current_date += timedelta(days=1)
-            # Skip weekends if you want (optional, keeping it simple for now)
             
+            # Dynamic Cone: Width grows with square root of time (i+1)
+            # This makes the chart look like a real fan chart
+            step_uncertainty = total_width_pct * np.sqrt((i+1) / len(forecast_vals))
+            
+            upper = val * (1 + step_uncertainty)
+            lower = val * (1 - step_uncertainty)
+
             chart_data.append({
                 "date": current_date.strftime("%Y-%m-%d"),
                 "price": round(val, 2),
                 "type": "forecast",
-                "lower": round(val - confidence, 2),
-                "upper": round(val + confidence, 2)
+                "lower": round(lower, 2),
+                "upper": round(upper, 2)
             })
 
     return chart_data
