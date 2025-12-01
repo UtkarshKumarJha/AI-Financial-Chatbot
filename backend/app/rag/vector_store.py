@@ -4,15 +4,21 @@ import os
 import hashlib
 from typing import List, Dict
 
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "chroma_db")
-HF_MODEL = os.getenv("HF_EMB_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
 def get_embeddings():
-    return HuggingFaceEmbeddings(model_name=HF_MODEL)
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY is missing!")
+        
+    return GoogleGenerativeAIEmbeddings(
+        model="models/embedding-001", 
+        google_api_key=api_key
+    )
 
 def get_vectorstore(collection_name="news"):
     embeddings = get_embeddings()
