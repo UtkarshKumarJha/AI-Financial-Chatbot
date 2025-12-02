@@ -18,3 +18,4 @@ langchain-chroma
 chromadb
 sentence-transformers
 pysqlite3-binary
+huggingface_hub

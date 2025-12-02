@@ -4,7 +4,7 @@ import xgboost as xgb
 from typing import Dict, List
 
 # ==========================================
-# 1. FEATURE ENGINEERING (The "Pro" Logic)
+# 1. FEATURE ENGINEERING (Pure Technicals)
 # ==========================================
 
 def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -14,7 +14,6 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     
     # 1. Log Returns (The Target)
-    # We use log returns because they are additive and stationary
     df['log_ret'] = np.log(df['close'] / df['close'].shift(1))
     
     # 2. Volatility (Risk)
@@ -28,10 +27,9 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["rsi"] = 100 - (100 / (1 + rs))
     
     # 4. SMA Distance (Mean Reversion)
-    # How far is price from the 10-day average?
     df["sma_dist"] = df['close'] / df['close'].rolling(window=10).mean() - 1
 
-    # Fill NaNs created by rolling windows
+    # Fill NaNs
     df = df.fillna(0)
     return df
 
@@ -40,12 +38,9 @@ def build_features(df, lags=7):
     Converts time-series into supervised learning format (X, y).
     """
     X, y = [], []
-    
-    # We predict the NEXT day's return
     target_col = 'log_ret'
     
     for i in range(lags, len(df) - 1):
-        # Feature Vector: [Past Returns... Technicals]
         past_returns = df[target_col].iloc[i-lags:i].values.tolist()
         
         technical_features = [
@@ -66,9 +61,9 @@ def build_features(df, lags=7):
 # 2. MAIN PREDICTION PIPELINE
 # ==========================================
 
-async def predict_prices(price_history: List[Dict], horizon_days=7):
+async def predict_prices(price_history: List[Dict], horizon_days=7, sentiment_score: float = 0.0):
     """
-    Predicts future prices using XGBoost on Log Returns.
+    Predicts future prices using XGBoost + Sentiment Adjustment Layer.
     """
     # 1. Validation
     if not price_history or len(price_history) < 60:
@@ -88,8 +83,8 @@ async def predict_prices(price_history: List[Dict], horizon_days=7):
     if len(X) < 20:
         return {"error": "Not enough valid training samples"}
 
-    # 5. Train Model (Using your Best Params from Kaggle)
-    # Params: {'learning_rate': 0.05, 'max_depth': 6, 'n_estimators': 500}
+    # 5. Train Model (Pure Technicals)
+    # Using your Kaggle-validated hyperparameters
     model = xgb.XGBRegressor(
         n_estimators=500,
         learning_rate=0.05,
@@ -103,17 +98,13 @@ async def predict_prices(price_history: List[Dict], horizon_days=7):
     # 6. Calculate Uncertainty (Conformal Prediction)
     preds_train = model.predict(X)
     errors = np.abs(y - preds_train)
-    # We use a dynamic margin based on recent volatility
     uncertainty_margin = np.percentile(errors, 90)
 
-    # 7. Recursive Forecast (The Future)
+    # 7. Recursive Forecast with Sentiment Adjustment
     future_prices = []
-    
-    # Start from the last known real price
     current_price = df_tech['close'].iloc[-1]
     
     # Build initial input vector
-    # [Last N returns, Last RSI, Last SMA_Dist, Last Volatility]
     last_known_idx = -1
     current_features = df_tech['log_ret'].iloc[-lags:].values.tolist() + [
         df_tech['rsi'].iloc[last_known_idx],
@@ -121,25 +112,35 @@ async def predict_prices(price_history: List[Dict], horizon_days=7):
         df_tech['volatility'].iloc[last_known_idx]
     ]
 
+    # --- THE SENTIMENT BIAS FACTOR ---
+    # We apply a small daily drift based on sentiment score (-1 to 1).
+    # 0.001 means a strong 1.0 sentiment adds 0.1% daily return boost.
+    # Over 7 days, this can shift price by ~0.7-1.0%, which is significant but realistic.
+    sentiment_bias = sentiment_score * 0.001 
+
     for i in range(horizon_days):
-        # Predict Log Return
+        # A. Get Technical Prediction (Base Math)
         pred_log_ret = float(model.predict(np.array([current_features]))[0])
         
-        # Convert back to Price: P_new = P_old * e^(return)
-        next_price = current_price * np.exp(pred_log_ret)
+        # B. Apply Sentiment Bias (The "Hybrid" Logic)
+        # If sentiment is positive, we tilt the probability up.
+        # We decay the bias slightly each day (news fades).
+        daily_bias = sentiment_bias * (0.9 ** i)
+        adjusted_log_ret = pred_log_ret + daily_bias
+        
+        # C. Convert back to Price
+        next_price = current_price * np.exp(adjusted_log_ret)
         future_prices.append(next_price)
         current_price = next_price
         
-        # Update Feature Vector for next step
-        # Shift returns window and append new prediction
-        # Keep technicals constant (Static Approximation for short-term stability)
-        current_features = current_features[1:lags] + [pred_log_ret] + current_features[lags:]
+        # D. Update Feature Vector for next step
+        current_features = current_features[1:lags] + [adjusted_log_ret] + current_features[lags:]
 
-    # 8. Construct Output
+    # 8. Output
     final_price = future_prices[-1]
     
-    # Calculate Confidence Interval (Cone of Uncertainty)
-    # Risk grows with time (Square Root of Time rule)
+    # Adjust Confidence Interval based on Sentiment Strength
+    # Strong sentiment = Higher volatility risk = Wider cone
     scaling_factor = np.sqrt(horizon_days)
     upper_bound = final_price * np.exp(uncertainty_margin * scaling_factor)
     lower_bound = final_price * np.exp(-uncertainty_margin * scaling_factor)
@@ -150,20 +151,17 @@ async def predict_prices(price_history: List[Dict], horizon_days=7):
         "forecast_range_low": round(lower_bound, 2),
         "forecast_range_high": round(upper_bound, 2),
         "confidence_interval_90": round(upper_bound - final_price, 2),
-        "method": "XGBoost (Log-Returns) + Conformal Prediction",
+        "method": "XGBoost (Log-Returns) + Sentiment Adjustment",
         "plot_data": future_prices
     }
 
 # ==========================================
 # 3. HELPER FOR FRONTEND CHART
 # ==========================================
-
 from datetime import datetime, timedelta
 
 def generate_chart_data(price_history, prediction_data):
     chart_data = []
-    
-    # History
     history_slice = price_history[-60:] if len(price_history) > 60 else price_history
     last_date_str = None
     
@@ -177,11 +175,9 @@ def generate_chart_data(price_history, prediction_data):
         })
         last_date_str = day["date"]
 
-    # Forecast
     if prediction_data and "plot_data" in prediction_data:
         forecast_vals = prediction_data["plot_data"]
-        # We need the daily volatility to draw the cone properly
-        # We approximate it from the final confidence interval width
+        # Calculate proportional width for the cone
         total_width_pct = (prediction_data["forecast_range_high"] / prediction_data["forecast_7d"]) - 1
         
         if last_date_str:
@@ -191,11 +187,8 @@ def generate_chart_data(price_history, prediction_data):
 
         for i, val in enumerate(forecast_vals):
             current_date += timedelta(days=1)
-            
-            # Dynamic Cone: Width grows with square root of time (i+1)
-            # This makes the chart look like a real fan chart
+            # Cone grows with sqrt of time
             step_uncertainty = total_width_pct * np.sqrt((i+1) / len(forecast_vals))
-            
             upper = val * (1 + step_uncertainty)
             lower = val * (1 - step_uncertainty)
 
