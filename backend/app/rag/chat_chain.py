@@ -2,11 +2,11 @@ import asyncio
 from datetime import datetime
 
 # Internal imports
-from app.rag.vector_store import retrieve
-from app.rag.gemini_llm import get_gemini_llm
-from app.services.data_fetcher import fetch_fundamentals, fetch_price_history
-from app.services.sentiment import compute_sentiment
-from app.services.predictor import predict_prices, generate_chart_data
+from .vector_store import retrieve
+from .gemini_llm import get_gemini_llm
+from ..services.data_fetcher import fetch_fundamentals, fetch_price_history
+from ..services.sentiment import compute_sentiment
+from ..services.predictor import predict_prices, generate_chart_data
 
 # --------------------------------------
 # Helper: Format retrieved documents
@@ -42,7 +42,7 @@ async def run_chat(user_input, ticker=None, horizon_days=7):
         k=5,
         collection=collection
     )
-
+    print(f"Retrieved {len(retrieved_docs)} documents for ticker '{ticker}'.")
     # -----------------------------
     # 2) Fetch Real-Time Data
     # -----------------------------

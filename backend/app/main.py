@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import os
 from .api.report import generate_report
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.chat import router as chat_router
+from .api.chat import router as chat_router
 
 app = FastAPI(
     title="InsightInvest API",

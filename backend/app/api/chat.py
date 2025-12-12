@@ -4,8 +4,9 @@ from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
 # Import the ingestion service (make sure you created the file from the previous step)
-from app.rag.ingest import ingest_news_for_ticker
-from app.rag.chat_chain import run_chat
+from ..rag.ingest import ingest_news_for_ticker
+from ..rag.chat_chain import run_chat
+from ..rag.vector_store import retrieve
 
 router = APIRouter()
 
@@ -22,7 +23,16 @@ async def api_chat(req: ChatReq, background_tasks: BackgroundTasks):
     2. Runs the RAG/LLM chain immediately using *existing* data.
     """
     if req.ticker:
-        background_tasks.add_task(ingest_news_for_ticker, req.ticker)
+        ticker = req.ticker.upper()
+        collection_name = f"news_{ticker.lower()}"
+        existing_docs = retrieve(query=ticker, k=1, collection=collection_name)
+        if not existing_docs:
+            print(f"No existing news for {ticker}.")
+            await ingest_news_for_ticker(ticker, limit=25)
+            print(f"Ingestion for {ticker} completed.")
+        else:
+            print(f"Existing news found for {ticker}, refreshing ingestion.")
+            background_tasks.add_task(ingest_news_for_ticker, ticker, limit=25)
         
     return await run_chat(
         user_input=req.user_input,

@@ -9,4 +9,5 @@ __pycache__/
 
 frontend/node_modules/
 backend/chroma_db/
+backend/hf_cache/
 

@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 python-dotenv
+redis
 pydantic
 yfinance
 newsapi-python

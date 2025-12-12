@@ -103,6 +103,7 @@ def ingest_documents(docs: List[Document], ids: List[str], collection_name: str)
 
 def retrieve(query, k=5, collection="news"):
     try:
+        print(f"collection: {collection}, query: {query}, k: {k}")
         vs = get_vectorstore(collection)
         retriever = vs.as_retriever(search_kwargs={"k": k})
         return retriever.invoke(query)

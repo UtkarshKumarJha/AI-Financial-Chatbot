@@ -1,5 +1,5 @@
-from app.services.data_fetcher import fetch_news_docs
-from app.rag.vector_store import docs_from_news, ingest_documents
+from ..services.data_fetcher import fetch_news_docs
+from .vector_store import docs_from_news, ingest_documents
 
 async def ingest_news_for_ticker(ticker: str, limit: int = 25):
     """

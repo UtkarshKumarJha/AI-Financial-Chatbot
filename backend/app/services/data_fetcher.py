@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import yfinance as yf
 from newsapi import NewsApiClient
 from dotenv import load_dotenv
+from .cache import get_cache, set_cache
 
 load_dotenv()
 
@@ -64,6 +65,12 @@ async def fetch_fundamentals(ticker: str):
     """
     Fetches company fundamentals using yfinance.
     """
+    
+    cache_key = f"fundamentals_{ticker.upper()}"
+    cache_data = get_cache(cache_key)  
+    if cache_data:
+        return cache_data
+    
     stock = yf.Ticker(ticker)
     info = stock.info
     if not info or "regularMarketPrice" not in info:
@@ -71,7 +78,7 @@ async def fetch_fundamentals(ticker: str):
     
     trends = get_financial_trends(stock)
 
-    return {
+    result ={
         "symbol": ticker.upper(),
         "name": info.get("longName", info.get("shortName", ticker)),
         "market_cap": info.get("marketCap"),
@@ -82,30 +89,43 @@ async def fetch_fundamentals(ticker: str):
         "industry": info.get("industry"),
         "financial_trends": trends
     }
-
+    set_cache(cache_key, result, expire=600)
+    return result
 
 async def fetch_price_history(ticker: str, days: int = 365):
     """
     Fetches historical daily close prices.
     """
+    cache_key = f"price_history_{ticker.upper()}_{days}"
+    cache_data = get_cache(cache_key)
+    if cache_data:
+        return cache_data
     stock = yf.Ticker(ticker)
     data = stock.history(period=f"{days}d")
 
     if data.empty:
         return []
+    
+    prices=[]
+    for index, row in data.iterrows():
+        prices.append({"date": str(index.date()), "close": round(float(row["Close"]), 2)})
+        
+    set_cache(cache_key, prices, expire=3600)
+    
+    return prices
 
-    return [
-        {"date": str(index.date()), "close": round(float(row["Close"]), 2)}
-        for index, row in data.iterrows()
-    ]
 
-
-def fetch_news_docs(ticker: str, limit: int = 25):
+async def fetch_news_docs(ticker: str, limit: int = 25):
     if newsapi is None:
         return [{"error": "NEWSAPI_KEY not set"}]
     
     to_date = datetime.utcnow()
     from_date = to_date - timedelta(days=14)
+    
+    cache_key = f"news_{ticker.upper()}_{limit}"
+    cache_data = get_cache(cache_key)
+    if cache_data:
+        return cache_data
 
     # Query both ticker & company name keywords
     query = f"{ticker} stocks"
@@ -117,7 +137,7 @@ def fetch_news_docs(ticker: str, limit: int = 25):
         from_param=from_date.strftime("%Y-%m-%d"),
         to=to_date.strftime("%Y-%m-%d")
     )
-    print(articles)
+
     result = []
     for article in articles.get("articles", []):
         result.append({
@@ -127,10 +147,6 @@ def fetch_news_docs(ticker: str, limit: int = 25):
             "published_at": article["publishedAt"],
             "content": article["description"]
         })
-
+        
+    set_cache(cache_key, result, expire=3600)
     return result
-
-
-async def fetch_news_docs(ticker: str, limit: int = 25):
-    import asyncio
-    return await asyncio.to_thread(fetch_news_docs, ticker, limit)
