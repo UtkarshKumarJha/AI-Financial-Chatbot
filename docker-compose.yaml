@@ -1,15 +1,11 @@
 services:
+  # Backend API
   server:
-    image: chatbot-server:latest
-    build:
-      context: ./backend   
-      dockerfile: Dockerfile 
+    image: thunder9596/financial-chatbot-backend:latest
     ports:
       - "8000:8000"
-    env_file:
-      - ./backend/.env    
-    volumes:
-      - ./backend:/app 
+    env_file: .env
+    restart: always
     depends_on:
       - redis
       - rabbitmq
@@ -21,44 +17,45 @@ services:
       - CHROMA_DB_HOST=chromadb
       - CHROMA_DB_PORT=8000
 
-  # Service 2: Frontend
+  # Frontend
   frontend:
-    build:
-      context: ./frontend     # <--- Clean! Points to the subfolder
-      dockerfile: Dockerfile  # <--- Looks for Dockerfile INSIDE frontend
+    image: thunder9596/financial-chatbot-frontend:latest
     ports:
       - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    restart: always
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://54.252.9.137:8000
 
+  # Redis
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
+    restart: always
     volumes:
       - redis_data:/data
 
+  # RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
       - "5672:5672"
       - "15672:15672"
+    restart: always
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
+  # Celery Worker
   celery_worker:
-    image: chatbot-server:latest
+    image: thunder9596/financial-chatbot-backend:latest
     command: celery -A app.celery_app worker --loglevel=info
+    restart: always
     depends_on:
       - rabbitmq
       - redis
       - server
       - chromadb
-    env_file:
-      - ./backend/.env
+    env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
@@ -66,15 +63,22 @@ services:
       - CHROMA_DB_HOST=chromadb
       - CHROMA_DB_PORT=8000
       - HF_HOME=/app/hf_cache
-    volumes:
-      - ./backend:/app
-  
+
+  # ChromaDB
   chromadb:
     image: chromadb/chroma:latest
     ports:
       - "8001:8000"
+    restart: always
     volumes:
       - chroma_data:/chroma/chroma
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 30
+
 volumes:
   redis_data:
   rabbitmq_data:
