@@ -1,5 +1,6 @@
 services:
   server:
+    image: chatbot-server:latest
     build:
       context: ./backend   
       dockerfile: Dockerfile 
@@ -11,8 +12,14 @@ services:
       - ./backend:/app 
     depends_on:
       - redis
+      - rabbitmq
+      - chromadb
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CHROMA_DB_HOST=chromadb
+      - CHROMA_DB_PORT=8000
 
   # Service 2: Frontend
   frontend:
@@ -33,6 +40,42 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  celery_worker:
+    image: chatbot-server:latest
+    command: celery -A app.celery_app worker --loglevel=info
+    depends_on:
+      - rabbitmq
+      - redis
+      - server
+      - chromadb
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CHROMA_DB_HOST=chromadb
+      - CHROMA_DB_PORT=8000
+      - HF_HOME=/app/hf_cache
+    volumes:
+      - ./backend:/app
   
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
 volumes:
   redis_data:
+  rabbitmq_data:
+  chroma_data:

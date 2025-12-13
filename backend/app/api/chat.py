@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from ..rag.ingest import ingest_news_for_ticker
 from ..rag.chat_chain import run_chat
 from ..rag.vector_store import retrieve
+from ..tasks import task_ingest_news
 
 router = APIRouter()
 
@@ -25,14 +26,14 @@ async def api_chat(req: ChatReq, background_tasks: BackgroundTasks):
     if req.ticker:
         ticker = req.ticker.upper()
         collection_name = f"news_{ticker.lower()}"
-        existing_docs = retrieve(query=ticker, k=1, collection=collection_name)
+        existing_docs = retrieve(query=ticker, collection=collection_name)
         if not existing_docs:
             print(f"No existing news for {ticker}.")
-            await ingest_news_for_ticker(ticker, limit=25)
-            print(f"Ingestion for {ticker} completed.")
+            task = task_ingest_news.apply_async(args=[ticker])
+            result = task.get(timeout=30)
         else:
             print(f"Existing news found for {ticker}, refreshing ingestion.")
-            background_tasks.add_task(ingest_news_for_ticker, ticker, limit=25)
+            task_ingest_news.delay(ticker)
         
     return await run_chat(
         user_input=req.user_input,

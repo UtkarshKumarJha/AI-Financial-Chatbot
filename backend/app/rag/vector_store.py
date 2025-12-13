@@ -4,6 +4,7 @@ from typing import List, Dict
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+import chromadb
 
 CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "chroma_db")
 
@@ -26,12 +27,26 @@ def get_vectorstore(collection_name="news"):
     embeddings = get_embeddings()
     if not embeddings:
         raise ValueError("Cannot initialize vector store without embeddings.")
+    
+    chroma_host = os.getenv("CHROMA_DB_HOST")
+    chroma_port = os.getenv("CHROMA_DB_PORT", "8000")
         
-    return Chroma(
-        embedding_function=embeddings,
-        collection_name=collection_name,
-        persist_directory=CHROMA_PERSIST_DIR,
-    )
+    if chroma_host:
+        print(f"Connecting to ChromaDB at {chroma_host}:{chroma_port}...")
+        client = chromadb.HttpClient(host=chroma_host, port=int(chroma_port))
+        
+        return Chroma(
+            client=client,
+            collection_name=collection_name,
+            embedding_function=embeddings,
+        )
+    else:
+        persist_dir = os.getenv("CHROMA_PERSIST_DIR", "chroma_db")
+        return Chroma(
+            collection_name=collection_name,
+            embedding_function=embeddings,
+            persist_directory=persist_dir,
+        )
 
 def generate_doc_id(url: str) -> str:
     """Generates a consistent MD5 hash from the URL to use as a Document ID."""
@@ -101,9 +116,8 @@ def ingest_documents(docs: List[Document], ids: List[str], collection_name: str)
         print(f"❌ Critical Error in ingest_documents: {e}")
         return 0
 
-def retrieve(query, k=5, collection="news"):
+def retrieve(query, k=20, collection="news"):
     try:
-        print(f"collection: {collection}, query: {query}, k: {k}")
         vs = get_vectorstore(collection)
         retriever = vs.as_retriever(search_kwargs={"k": k})
         return retriever.invoke(query)
