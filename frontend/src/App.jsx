@@ -35,8 +35,6 @@ function App() {
     setReport(null);
 
     try {
-      // Construct the user input based on whether they typed a question
-      // If box is empty, default to "Analyze [Ticker] stock"
       const finalQuery = question.trim() 
         ? question 
         : `Analyze ${ticker} stock performance and outlook.`;
