@@ -11,9 +11,16 @@ app = FastAPI(
     description="API for InsightInvest Financial Chatbot"
 )
 
+origins = [
+    "http://localhost:5173",
+    "http://localhost:8000",
+    "http://13.211.145.112:5173",
+    "http://13.211.145.112:5173/",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

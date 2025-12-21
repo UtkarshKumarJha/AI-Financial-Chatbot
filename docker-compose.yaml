@@ -1,6 +1,7 @@
 services:
   # Backend API
   server:
+    build: ./backend
     image: thunder9596/financial-chatbot-backend:latest
     ports:
       - "8000:8000"
@@ -24,13 +25,11 @@ services:
       - "5173:5173"
     restart: always
     environment:
-      - VITE_API_URL=http://54.252.9.137:8000
+      - VITE_API_URL=http://${EC2_IP}:8000
 
   # Redis
   redis:
     image: redis:alpine
-    ports:
-      - "6379:6379"
     restart: always
     volumes:
       - redis_data:/data
@@ -38,15 +37,13 @@ services:
   # RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     restart: always
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
   # Celery Worker
   celery_worker:
+    build: ./backend
     image: thunder9596/financial-chatbot-backend:latest
     command: celery -A app.celery_app worker --loglevel=info
     restart: always
@@ -67,8 +64,6 @@ services:
   # ChromaDB
   chromadb:
     image: chromadb/chroma:latest
-    ports:
-      - "8001:8000"
     restart: always
     volumes:
       - chroma_data:/chroma/chroma

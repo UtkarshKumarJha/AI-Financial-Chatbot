@@ -58,8 +58,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-purple-500/30 pb-20">
-      
-      {/* --- BACKGROUND EFFECTS --- */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-900/20 rounded-full blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-900/10 rounded-full blur-[120px]"></div>
@@ -68,7 +66,6 @@ function App() {
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-6 py-12">
         
-        {/* --- HEADER --- */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center gap-3 mb-6 bg-slate-900/50 border border-slate-700/50 p-2 pr-6 rounded-full backdrop-blur-sm">
             <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
@@ -88,10 +85,8 @@ function App() {
           </p>
         </div>
 
-        {/* --- RESEARCH COMMAND CENTER --- */}
         <div className="max-w-3xl mx-auto mb-16 bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 shadow-2xl">
           
-          {/* Top Row: Ticker & Horizon */}
           <div className="flex flex-col sm:flex-row gap-4 mb-4">
             <div className="relative flex-1 group">
                 <Search className="absolute left-4 top-3.5 text-slate-500 w-5 h-5 group-focus-within:text-purple-400 transition-colors" />
@@ -119,7 +114,6 @@ function App() {
             </div>
           </div>
 
-          {/* Middle Row: Natural Language Question */}
           <div className="relative mb-6 group">
             <MessageSquare className="absolute left-4 top-4 text-slate-500 w-5 h-5 group-focus-within:text-blue-400 transition-colors" />
             <textarea
@@ -130,7 +124,6 @@ function App() {
             />
           </div>
 
-          {/* Action Button */}
           <button
             onClick={generateReport}
             disabled={loading}
@@ -157,11 +150,9 @@ function App() {
           )}
         </div>
 
-        {/* --- RESULTS DASHBOARD --- */}
         {report && (
           <div className="space-y-10 animate-fade-in-up">
-            
-            {/* 1. User Query Context (Visual Feedback) */}
+
             <div className="text-center">
                 <div className="inline-block px-4 py-1 bg-slate-800 rounded-full text-xs text-slate-400 mb-2 border border-slate-700">
                     Analysis Request
@@ -171,19 +162,16 @@ function App() {
                 </h3>
             </div>
 
-            {/* 2. Charts & Data */}
             <section>
                 <StockChart data={report.chart_data} />
             </section>
 
-            {/* 3. The AI Report */}
             <section>
                 <AnalysisCard report={report} />
             </section>
           </div>
         )}
 
-        {/* --- LOADING SKELETON --- */}
         {loading && !report && (
             <div className="max-w-3xl mx-auto space-y-6 mt-12 opacity-50">
                 <div className="h-96 w-full bg-slate-800/30 rounded-2xl animate-pulse"></div>
